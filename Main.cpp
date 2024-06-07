@@ -22,7 +22,7 @@ int main(int argc, char* argv[]) {
 	bus.ShowMemory();
 
 	while (RUN_ROM) {
-		opcode = bus.GetMemoryAt(reg.PC.Get());
+		bus.Fetch(reg);
 
 		cout << endl << hex << static_cast<int>(reg.PC.Get()) << " " << static_cast<int>(opcode) << endl;
 

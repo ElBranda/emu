@@ -1,8 +1,7 @@
 #include <iostream>
 #include <fstream>
 
-#ifndef CPU_H
-#define CPU_H
+#pragma once
 
 #define u8 uint8_t
 #define u16 uint16_t
@@ -59,6 +58,8 @@ namespace CPU {
 		u8* memory = new u8[0x10000];
 
 	public:
+		void Fetch(Register& reg);
+
 		void LoadGame(std::basic_ifstream<u8>& gb_rom);
 		void ShowMemory();
 		u8 GetMemoryAt(u16 PC);
@@ -71,7 +72,3 @@ namespace CPU {
 		void LD(Memory_Bus& bus, Register& reg);
 	};
 }
-
-
-
-#endif // !CPU_H

@@ -26,9 +26,13 @@ void Register::Init() {
 	PC.Set(0x100);
 }
 
+void Memory_Bus::Fetch(Register& reg) {
+	opcode = GetMemoryAt(reg.PC.Get());
+
+	reg.PC.Increment(1);
+}
 void Memory_Bus::LoadGame(std::basic_ifstream<u8>& gb_rom) { for (int i = 0; i < 0x10000; i++) gb_rom.get(memory[i]); }
 void Memory_Bus::ShowMemory() {
-	//std::cout << "0000: ";
 	for (int i = 0; i < 0x10000; i++) {
 		if (i % 16 == 0) std::cout << std::endl << std::hex << std::setw(4) << std::setfill('0') << static_cast<int>(i) << ": ";
 		
