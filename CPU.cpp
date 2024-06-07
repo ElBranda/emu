@@ -40,24 +40,32 @@ void Memory_Bus::ShowMemory() {
 	}
 }
 u8 Memory_Bus::GetMemoryAt(u16 PC) { return memory[PC]; }
-void Memory_Bus::Execute(Memory_Bus bus, Register reg) {
+void Memory_Bus::Execute(Memory_Bus& bus, Register& reg) {
 	Command com;
 
-	switch (opcode & 0xf0) {
-	case 0x00: {
-		switch (opcode) {
+	switch (opcode) {
 		case 0x00: com.NOP(reg); break;
-		case 0x06: com.LD(bus, reg); break;
-		}
-	}
+		case 0x06: com.LD8(nullptr, 'B', reg, opcode); break;
+		case 0x0e: com.LD8(nullptr, 'C', reg, opcode); break;
+		case 0x16: com.LD8(nullptr, 'D', reg, opcode); break;
+		case 0x1e: com.LD8(nullptr, 'E', reg, opcode); break;
+		case 0x26: com.LD8(nullptr, 'H', reg, opcode); break;
+		case 0x2e: com.LD8(nullptr, 'L', reg, opcode); break;
 	}
 }
 
 void Command::NOP(Register& reg) { reg.PC.Increment(1); }
-void Command::LD(Memory_Bus& bus, Register& reg) {
-	switch (opcode) {
-	case 0x06: {
-		reg.B.Set(opcode);
-	}
+void Command::LD8(Memory_Bus* bus, char reg_name, Register& reg, u8 val) {
+	if (bus == nullptr) {
+		switch (reg_name) {
+			case 'B': reg.B.Set(val);
+			case 'C': reg.C.Set(val);
+			case 'D': reg.D.Set(val);
+			case 'E': reg.E.Set(val);
+			case 'H': reg.H.Set(val);
+			case 'L': reg.L.Set(val);
+		}
+	} else {
+
 	}
 }

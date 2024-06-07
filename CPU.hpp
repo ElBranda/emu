@@ -63,12 +63,12 @@ namespace CPU {
 		void LoadGame(std::basic_ifstream<u8>& gb_rom);
 		void ShowMemory();
 		u8 GetMemoryAt(u16 PC);
-		void Execute(Memory_Bus bus, Register reg);
+		void Execute(Memory_Bus& bus, Register& reg);
 	};
 
 	class Command {
 	public:
 		void NOP(Register& reg);
-		void LD(Memory_Bus& bus, Register& reg);
+		void LD8(Memory_Bus* bus, char reg_name, Register& reg, u8 val);
 	};
 }
