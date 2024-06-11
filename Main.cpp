@@ -27,7 +27,7 @@ int main(int argc, char* argv[]) {
 
 		bus.Execute(bus);
 
-		if (opcode == 0x05) { cout << "llegamos"; cin.get(); }
+		if (opcode == 0x05) { cout << hex<<static_cast<int>(reg.PC.Get())<<" llegamos"; cin.get(); }
 	}
 
 	return 0;

@@ -65,6 +65,7 @@ void Memory_Bus::Execute(Memory_Bus& bus) {
 	switch (opcode) {
 	case 0x00: com.NOP(); break;
 	case 0x01: com.LD16(reg.BC, Memory_Bus::GetLSBF(bus)); break;
+	case 0x05: com.DEC8(reg_select::B, reg.BC, bus); break;
 	case 0x06: com.LD8(reg_select::B, reg.BC, bus.GetMemoryAt(reg.PC.Get())); break;
 	case 0x0a: com.LD8(reg_select::A, reg.AF, bus.GetMemoryAt(reg.BC.Get())); break;
 	case 0x0d: com.DEC8(reg_select::C, reg.BC, bus); break;
@@ -158,28 +159,34 @@ void Command::DEC8(char reg_name, Register16& regis, Memory_Bus& bus) {
 	switch (reg_name) {
 		
 	case 0: {
-		if (regis.GetFirst() == 0x00) reg.flag.Z.Set(reset);
+		regis.SetFirst(regis.GetFirst() - 1);
+		if (regis.GetFirst() == 0x00) reg.flag.Z.Set(set);
+		else reg.flag.Z.Set(reset);
 		if ((regis.GetLast() & 0x0f) == 0x0f) reg.flag.H.Set(set);
 
-		regis.SetFirst(regis.GetFirst() - 1);
+		
 
 		
 		break;
 	}
 	case 1: {
-		if (regis.GetLast() == 0x00) reg.flag.Z.Set(reset);
+		regis.SetLast(regis.GetLast() - 1);
+		if (regis.GetLast() == 0x00) reg.flag.Z.Set(set);
+		else reg.flag.Z.Set(reset);
 		if ((regis.GetLast() & 0x0f) == 0x0f) reg.flag.H.Set(set);
 
-		regis.SetLast(regis.GetLast() - 1);
+		
 
 		
 		break;
 	}
 	case 3: {
+		bus.SetMemory(regis.Get(), bus.GetMemoryAt(regis.Get()) - 1);
 		if (bus.GetMemoryAt(regis.Get()) == 0x00) reg.flag.Z.Set(set);
+		else reg.flag.Z.Set(reset);
 		if ((bus.GetMemoryAt(regis.Get()) & 0x0f) == 0x0f) reg.flag.H.Set(set);
 
-		bus.SetMemory(regis.Get(), bus.GetMemoryAt(regis.Get()) - 1);
+		
 
 
 		break;
