@@ -20,6 +20,11 @@ void Register16::Increment(u8 val) {
 	first_val = ((reg & 0xff00) >> 8);
 	last_val = (reg & 0xff);
 }
+void Register16::Decrement(u8 val) {
+	u16 reg = ((first_val << 8) + last_val - val);
+	first_val = ((reg & 0xff00) >> 8);
+	last_val = (reg & 0xff);
+}
 
 flg RegisterFlag::Get() const { return value; }
 void RegisterFlag::Set(flg val) { value = val; }
@@ -59,18 +64,24 @@ void Memory_Bus::Execute(Memory_Bus& bus) {
 
 	switch (opcode) {
 	case 0x00: com.NOP(); break;
+	case 0x01: com.LD16(reg.BC, Memory_Bus::GetLSBF(bus)); break;
 	case 0x06: com.LD8(reg_select::B, reg.BC, bus.GetMemoryAt(reg.PC.Get())); break;
 	case 0x0a: com.LD8(reg_select::A, reg.AF, bus.GetMemoryAt(reg.BC.Get())); break;
+	case 0x0d: com.DEC8(reg_select::C, reg.BC, bus); break;
 	case 0x0e: com.LD8(reg_select::C, reg.BC, bus.GetMemoryAt(reg.PC.Get())); break;
+	case 0x11: com.LD16(reg.DE, Memory_Bus::GetLSBF(bus)); break;
 	case 0x16: com.LD8(reg_select::D, reg.DE, bus.GetMemoryAt(reg.PC.Get())); break;
 	case 0x1e: com.LD8(reg_select::E, reg.DE, bus.GetMemoryAt(reg.PC.Get())); break;
+	case 0x20: com.JR(bus, reg.flag.Z.Get() == reset); break;
+	case 0x21: com.LD16(reg.HL, Memory_Bus::GetLSBF(bus)); break;
+	case 0x22: com.LDI(reg_select::HL, &bus); break;
 	case 0x26: com.LD8(reg_select::H, reg.HL, bus.GetMemoryAt(reg.PC.Get())); break;
 	case 0x2e: com.LD8(reg_select::L, reg.HL, bus.GetMemoryAt(reg.PC.Get())); break;
 	case 0x31: com.LD16(reg.SP, Memory_Bus::GetLSBF(bus)); break;
 	case 0x3e: com.LD8(reg_select::A, reg.AF, opcode); break;
 	case 0xaf: com.XOR(reg_select::A, reg.AF); break;
 	case 0xc3: com.JP(bus); break;
-	case 0xea: com.LD8(reg_select::NN, reg.NN, reg.AF.GetFirst(), &bus); std::cout << std::endl << std::hex << "IN MEM: " << static_cast<int>(bus.GetMemoryAt(0x0000)) << " A: " << static_cast<int>(reg.AF.GetFirst()) << std::endl; break;
+	case 0xea: com.LD8(reg_select::NN, reg.NN, reg.AF.GetFirst(), &bus); break;
 	case 0xf3: com.DI(bus); break;
 	}
 }
@@ -89,21 +100,23 @@ void Memory_Bus::SetIMEDisable() { IME = disable; }
 
 void Command::NOP() { return; }
 void Command::LD8(char reg_name, Register16& reg, u8 val, Memory_Bus* bus) {
-	if (bus == nullptr) {
-		switch (reg_name) {
-		case 0: reg.SetFirst(val); break;
-		case 1: reg.SetLast(val); break;
+	switch (reg_name) {
+	case 0: reg.SetFirst(val); break;
+	case 1: reg.SetLast(val); break;
+	case 2: {
+		u16 mem_pos = Memory_Bus::GetLSBF(*bus);
+
+		if (mem_pos > ROM_LIMIT) bus->SetMemory(mem_pos, val);
+
+		break;
+	}
+	case 3: {
+		if (reg.Get() > ROM_LIMIT) {
+			bus->SetMemory(reg.Get(), val);
 		}
-	} else {
-		switch (reg_name) {
-		case 0: {
-			u16 mem_pos = Memory_Bus::GetLSBF(*bus);
-			
-			if (mem_pos > ROM_LIMIT) bus->SetMemory(mem_pos, val);
-			
-			break;
-		}
-		}
+
+		break;
+	}
 	}
 }
 void Command::LD16(Register16& reg, u16 val, Memory_Bus* bus) {
@@ -128,4 +141,60 @@ void Command::XOR(char reg_name, Register16 regis) {
 	reg.flag.N.Set(reset);
 	reg.flag.H.Set(reset);
 	reg.flag.C.Set(reset);
+}
+void Command::LDI(char reg_name, Memory_Bus* bus) {
+	//std::cout << std::endl << std::hex << "IN MEM: " << static_cast<int>(bus->GetMemoryAt(reg.HL.Get())) << "A: " << static_cast<int>(reg.AF.GetFirst()) << std::endl;
+
+	switch (reg_name) {
+	case 0: LD8(reg_name, reg.AF, bus->GetMemoryAt(reg.HL.Get())); break;
+	case 3: LD8(reg_name, reg.HL, reg.AF.GetFirst(), bus); break;
+	}
+	
+	//std::cout << std::endl << std::hex << "IN MEM: " << static_cast<int>(bus->GetMemoryAt(reg.HL.Get())) << "A: " << static_cast<int>(reg.AF.GetFirst()) << std::endl;
+
+	reg.HL.Increment(1);
+}
+void Command::DEC8(char reg_name, Register16& regis, Memory_Bus& bus) {
+	switch (reg_name) {
+		
+	case 0: {
+		if (regis.GetFirst() == 0x00) reg.flag.Z.Set(reset);
+		if ((regis.GetLast() & 0x0f) == 0x0f) reg.flag.H.Set(set);
+
+		regis.SetFirst(regis.GetFirst() - 1);
+
+		
+		break;
+	}
+	case 1: {
+		if (regis.GetLast() == 0x00) reg.flag.Z.Set(reset);
+		if ((regis.GetLast() & 0x0f) == 0x0f) reg.flag.H.Set(set);
+
+		regis.SetLast(regis.GetLast() - 1);
+
+		
+		break;
+	}
+	case 3: {
+		if (bus.GetMemoryAt(regis.Get()) == 0x00) reg.flag.Z.Set(set);
+		if ((bus.GetMemoryAt(regis.Get()) & 0x0f) == 0x0f) reg.flag.H.Set(set);
+
+		bus.SetMemory(regis.Get(), bus.GetMemoryAt(regis.Get()) - 1);
+
+
+		break;
+	}
+	}
+
+	
+	reg.flag.N.Set(set);
+}
+void Command::JR(Memory_Bus& bus, flg condition) {
+	s8 pos = bus.GetMemoryAt(reg.PC.Get());
+
+	//std::cout << std::endl << std::hex << "pos: " << static_cast<int>(pos + 1 + reg.PC.Get()) << std::endl;
+
+	if (condition) reg.PC.Set(pos+1+reg.PC.Get());
+
+	//std::cout << std::endl << std::hex << "IN JR: " << static_cast<int>(reg.PC.Get()) << std::endl;
 }

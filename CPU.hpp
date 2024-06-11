@@ -4,6 +4,7 @@
 #pragma once
 
 #define u8 uint8_t
+#define s8 char
 #define u16 uint16_t
 #define flg bool
 #define set true
@@ -16,7 +17,7 @@
 
 namespace CPU {
 	extern u8 opcode;
-	enum reg_select { A = 0, B = 0, D = 0, H = 0, F = 1, C = 1, E = 1, L = 1, NN = 0 };
+	enum reg_select { A = 0, B = 0, D = 0, H = 0, F = 1, C = 1, E = 1, L = 1, NN = 2, HL = 3};
 
 	class Register16 {
 	private:
@@ -30,6 +31,7 @@ namespace CPU {
 		void SetLast(u8 val);
 		void SetVirtual(u8 f_val, u8 l_val);
 		void Increment(u8 val);
+		void Decrement(u8 val);
 	};
 
 	class RegisterFlag {
@@ -80,5 +82,8 @@ namespace CPU {
 		void JP(Memory_Bus& bus);
 		void DI(Memory_Bus& bus);
 		void XOR(char reg_name, Register16 regis);
+		void LDI(char reg_name, Memory_Bus* bus);
+		void DEC8(char reg_name, Register16& regis, Memory_Bus& bus);
+		void JR(Memory_Bus& bus, flg condition);
 	};
 }
