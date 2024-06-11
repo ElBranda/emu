@@ -8,27 +8,27 @@
 #define flg bool
 #define set true
 #define reset false
+#define interr bool
+#define enable true
+#define disable false
 #define RUN_ROM true
+#define ROM_LIMIT 0x7fff
 
 namespace CPU {
 	extern u8 opcode;
-
-	class Register8 {
-	private:
-		u8 value;
-	public:
-		u8 Get() const;
-		void Set(u8 val);
-		void Increment(u8 val);
-	};
+	enum reg_select { A = 0, B = 0, D = 0, H = 0, F = 1, C = 1, E = 1, L = 1, NN = 0 };
 
 	class Register16 {
 	private:
-		u8 first_val, second_val;
+		u8 first_val, last_val;
 	public:
 		u16 Get() const;
+		u16 GetFirst() const;
+		u16 GetLast() const;
 		void Set(u16 val);
-		void SetVirtual(u8 f_val, u8 s_val);
+		void SetFirst(u8 val);
+		void SetLast(u8 val);
+		void SetVirtual(u8 f_val, u8 l_val);
 		void Increment(u8 val);
 	};
 
@@ -41,8 +41,7 @@ namespace CPU {
 	};
 
 	struct Register {
-		Register8 A, B, C, D, E, F, H, L;
-		Register16 AF, DB, DE, HL, SP, PC;
+		Register16 AF, BC, DE, HL, SP, PC, NN;
 
 		struct Flag_Register {
 			RegisterFlag Z, H, N, C;
@@ -53,22 +52,33 @@ namespace CPU {
 		void Init();
 	};
 
+	extern Register reg;
+
 	class Memory_Bus {
 	private:
 		u8* memory = new u8[0x10000];
+		interr IME;
 
 	public:
-		void Fetch(Register& reg);
-
+		void Fetch();
 		void LoadGame(std::basic_ifstream<u8>& gb_rom);
 		void ShowMemory();
 		u8 GetMemoryAt(u16 PC);
-		void Execute(Memory_Bus& bus, Register& reg);
+		void SetMemory(u16 memory_pos, u8 data);
+		void Execute(Memory_Bus& bus);
+
+		static u16 GetLSBF(Memory_Bus& bus);
+
+		void SetIMEDisable();
 	};
 
 	class Command {
 	public:
-		void NOP(Register& reg);
-		void LD8(Memory_Bus* bus, char reg_name, Register& reg, u8 val);
+		void NOP();
+		void LD8(char reg_name, Register16& reg, u8 val, Memory_Bus* bus = nullptr);
+		void LD16(Register16& reg, u16 val, Memory_Bus* bus = nullptr);
+		void JP(Memory_Bus& bus);
+		void DI(Memory_Bus& bus);
+		void XOR(char reg_name, Register16 regis);
 	};
 }

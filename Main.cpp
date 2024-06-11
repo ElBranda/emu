@@ -8,7 +8,6 @@ using namespace std;
 
 int main(int argc, char* argv[]) {
 	basic_ifstream<u8> gb_rom;
-	Register reg{};
 	Memory_Bus bus;
 
 	if (!isAttachedFile(argc)) gb_rom.open("example.gb", ios::binary);
@@ -22,11 +21,11 @@ int main(int argc, char* argv[]) {
 	bus.ShowMemory();
 
 	while (RUN_ROM) {
-		bus.Fetch(reg);
+		bus.Fetch();
 
 		cout << endl << hex << static_cast<int>(reg.PC.Get()) << " " << static_cast<int>(opcode) << endl;
 
-		bus.Execute(bus, reg);
+		bus.Execute(bus);
 
 		cin.get();
 	}
