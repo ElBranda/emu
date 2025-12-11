@@ -1,16 +1,10 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
+#include <cstdint>
 
 #pragma once
 
-
-#define flg bool
-#define set true
-#define reset false
-#define interr bool
-#define enable true
-#define disable false
 #define RUN_ROM true
 #define ROM_LIMIT 0x7fff
 
@@ -90,7 +84,6 @@ namespace CPU {
 		u8 wram[0x2000];		// Work RAM (8KB)
 		u8 hram[0x80];			// High RAM
 		u8 io[0x80];			// IO Registers
-		interr IME;
 
 	public:
 		Memory_Bus();
@@ -98,7 +91,10 @@ namespace CPU {
 		u8 Read(u16 address);
 		void Write(u16 address, u8 value);
 		bool LoadROM(const char* path);
+
+		// DEBUG
 		void ShowMemory(u16 start, u16 end);
+		int GetRomSize();
 	};
 
 	class Command {
@@ -124,6 +120,12 @@ namespace CPU {
 		void DI(bool& ime_flag);
 		void LDI_Write(Memory_Bus& bus, u16& HL, u8 val);
 		void LDI_Read(Memory_Bus& bus, u16& HL, u8& dest);
+
+		void CP(u8 A, u8 val, Flags& flags);
+
+		void PUSH(Memory_Bus& bus, u16& SP, u16 val);
+
+		void CALL(Memory_Bus& bus, u16& SP, u16& PC, u16 target_addr);
 	};
 
 	class Processor {
@@ -132,13 +134,16 @@ namespace CPU {
 		Register reg;
 		Memory_Bus bus;
 		Command com;
-		u8 current_opcode;
-
+		u8 Execute(u8 opcode);
+		
 		public:
 		void Init();
-		void Step();	// Fetch-Decode-Execute
-		void Execute();
+		u8 Step();	// Fetch-Decode-Execute
 		u16 Fetch16();
-		void SetIME(bool enabled) { IME = enable; };
+		void SetIME(bool enabled) { IME = enabled; };
+		bool LoadROM(const char* path);
+		int GetRomSize();
+		u16 GetPC() const { return reg.val.PC; }
+		u16 GetHL() const { return reg.val.HL; }
 	};
 }

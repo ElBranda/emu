@@ -18,22 +18,47 @@ Memory_Bus::Memory_Bus() {
 	rom.resize(0x8000, 0);
 }
 bool Memory_Bus::LoadROM(const char* path) {
+	std::cout << " [DEBUG] Intentando abrir ROM en ruta: " << path << std::endl;
+	
 	std::ifstream file(path, std::ios::binary | std::ios::ate);
-	if (!file.is_open()) return false;
+
+	if (!file.is_open()) {
+		std::cout << " [ERROR] file.is_open() dio FALSE. El archivo no existe o esta bloqueado." << std::endl;
+		return false;
+	}
 
 	std::streamsize size = file.tellg();
+	std::cout << " [DEBUG] file.tellg() devolvio: " << size << std::endl;
+
+	if (size <= 0) {
+        std::cout << " [ERROR] El archivo tiene tamanio 0 o es invalido." << std::endl;
+        return false;
+    }
+
 	file.seekg(0, std::ios::beg);
 
 	rom.resize(size);
-	if (file.read((char*)rom.data(), size)) return true;
+
+	std::cout << " [DEBUG] Vector redimensionado a: " << rom.size() << " bytes." << std::endl;
+
+	if (file.read((char*)rom.data(), size)) {
+		std::cout << " [EXITO] ROM cargada en memoria correctamente." << std::endl;
+
+		return true;
+	}
+
+	std::cout << " [ERROR] Fallo al leer los datos con file.read()." << std::endl;
 	return false;
 }
 u8 Memory_Bus::Read(u16 address) {
+	if (address == 0xFF44) {
+        return 0x94; 
+    }
 	if (address < 0x8000) {
 		// Cartucho (ROM)
 		// Si la ROM es chica, evita el crash
-		if (address < rom.size()) return rom[address];
-		return 0xFF;
+		if (rom.empty() || address >= rom.size()) return 0xFF;
+		return rom[address];
 	} else if (address >= 0x8000 && address < 0xA000) {
 		return vram[address - 0x8000];
 	} else if (address >= 0xC000 && address < 0xE000) {
@@ -69,8 +94,11 @@ void Memory_Bus::ShowMemory(u16 start, u16 end) {
 	}
 	std::cout << std::endl;
 }
+int Memory_Bus::GetRomSize() {
+	return rom.size();
+}
 
-void Command::NOP() { return; }
+void Command::NOP() { }
 // LD r, r'
 void Command::LD(u8& dest, u8 src) {
 	dest = src;
@@ -139,18 +167,60 @@ void Command::LDI_Read(Memory_Bus& bus, u16& HL, u8& dest) {
 	HL++;
 }
 
+void Command::CP(u8 A, u8 val, Flags& flags) {
+	flags.SetZ(A == val);
+
+	flags.SetN(true);
+
+	flags.SetH((A & 0x0F) < (val & 0x0F));
+
+	flags.SetC(A < val);
+}
+
+void Command::PUSH(Memory_Bus& bus, u16& SP, u16 val) {
+	SP--;
+	bus.Write(SP, (val >> 8) & 0xFF);
+	SP--;
+	bus.Write(SP, val & 0xFF);
+}
+
+void Command::CALL(Memory_Bus& bus, u16& SP, u16& PC, u16 target_addr) {
+	PUSH(bus, SP, PC);
+
+	PC = target_addr;
+}
+
+
 
 
 void Processor::Init() {
 	reg.Init();
 }
 
-void Processor::Step() {
-	// FETCH
-	current_opcode = bus.Read(reg.val.PC);
-	reg.val.PC++;
+u8 Processor::Step() {
+	u16 curr_pc = reg.val.PC;
 
-	Execute();
+	// FETCH
+	u8 opcode = bus.Read(reg.val.PC++);
+
+	// LOG
+	std::cout << std::hex << std::uppercase << std::setfill('0')
+			  << "PC:0x" << std::setw(4) << curr_pc
+			  << " | OP:0x" << std::setw(2) << (int)opcode
+			  << " | AF:0x" << std::setw(4) << reg.val.AF
+              << " | BC:0x" << std::setw(4) << reg.val.BC
+              << " | HL:0x" << std::setw(4) << reg.val.HL
+              << " | SP:0x" << std::setw(4) << reg.val.SP
+			  << " | Z:" << reg.flag.Z()
+			  << " | H:" << reg.flag.H()
+			  << " | N:" << reg.flag.N()
+			  << " | C:" << reg.flag.C()
+			  << " | IME:" << IME
+			  << std::endl;
+
+	u8 cycles = Execute(opcode);
+
+	return cycles;
 }
 
 u16 Processor::Fetch16() {
@@ -163,30 +233,75 @@ u16 Processor::Fetch16() {
 	return (high << 8) | low;
 }
 
-void Processor::Execute() {
-	switch (current_opcode) {
-		case 0x00: com.NOP(); break;
-		case 0x01: com.LD(reg.val.BC, Fetch16()); break;
+u8 Processor::Execute(u8 opcode) {
+	switch (opcode) {
+		case 0x00: com.NOP(); return 1;
+		case 0x01: com.LD(reg.val.BC, Fetch16()); return 3;
+		case 0x05: com.DEC(reg.val.B, reg.flag); return 1;
+		case 0x0d: com.DEC(reg.val.C, reg.flag); return 1;
+		case 0x11: com.LD(reg.val.DE, Fetch16()); return 3;
+		case 0x20: {
+			s8 offset = (s8)bus.Read(reg.val.PC++);
+			if (!reg.flag.Z()) {
+				com.JR(reg.val.PC, offset, true);
+				return 3;
+			}
+			return 2;
+		}
+		case 0x21: com.LD(reg.val.HL, Fetch16()); return 3;
+		case 0x22: com.LDI_Write(bus, reg.val.HL, reg.val.A); return 2;
+		case 0x31: com.LD(reg.val.SP, Fetch16()); return 3;
+		case 0x3e: com.LD(reg.val.A, bus.Read(reg.val.PC++)); return 2;
+		case 0x40: com.LD(reg.val.B, reg.val.B); return 1;
+		case 0xaf: com.XOR(reg.val.A, reg.val.A, reg.flag); return 1;
+		case 0xc3: com.JP(reg.val.PC, Fetch16()); return 3;
+		case 0xc5: com.PUSH(bus, reg.val.SP, reg.val.BC); return 4;
+		case 0xcd: com.CALL(bus, reg.val.SP, reg.val.PC, Fetch16()); return 6;
+		case 0xd5: com.PUSH(bus, reg.val.SP, reg.val.DE); return 4;
+		case 0xe0: {
+			u8 offset = bus.Read(reg.val.PC++);
+			u16 address = 0xFF00 + offset;
+			com.LD_Mem(bus, address, reg.val.A);
+			return 3;
+		}
+		case 0xe5: com.PUSH(bus, reg.val.SP, reg.val.HL); return 4;
+		case 0xea: com.LD_Mem(bus, Fetch16(), reg.val.A); return 4;
+		case 0xf0: {
+			u8 offset = bus.Read(reg.val.PC++);
+			u16 address = 0xFF00 + offset;
+			com.LD(reg.val.A, bus.Read(address));
+			return 3;
+		}
+		case 0xf3: com.DI(IME); return 1;
+		case 0xf5: com.PUSH(bus, reg.val.SP, reg.val.AF); return 4;
+		case 0xfa: {
+			u16 address = Fetch16();
+			u8 val = bus.Read(address);
+			com.LD(reg.val.A, val);
+			return 4;
+		}
+		case 0xfe: {
+			u8 n = bus.Read(reg.val.PC++);
+			com.CP(reg.val.A, n, reg.flag);
+			return 2;
+		}
 
 		// case 0x01: com.LD16(reg.BC, Memory_Bus::GetLSBF(bus)); break;
-		// case 0x05: com.DEC8(reg_select::B, reg.BC, bus); break;
 		// case 0x06: com.LD8(reg_select::B, reg.BC, bus.GetMemoryAt(reg.PC.Get())); break;
 		// case 0x0a: com.LD8(reg_select::A, reg.AF, bus.GetMemoryAt(reg.BC.Get())); break;
-		// case 0x0d: com.DEC8(reg_select::C, reg.BC, bus); break;
 		// case 0x0e: com.LD8(reg_select::C, reg.BC, bus.GetMemoryAt(reg.PC.Get())); break;
 		// case 0x11: com.LD16(reg.DE, Memory_Bus::GetLSBF(bus)); break;
 		// case 0x16: com.LD8(reg_select::D, reg.DE, bus.GetMemoryAt(reg.PC.Get())); break;
 		// case 0x1e: com.LD8(reg_select::E, reg.DE, bus.GetMemoryAt(reg.PC.Get())); break;
-		// case 0x20: com.JR(bus, reg.flag.Z.Get() == reset); break;
-		// case 0x21: com.LD16(reg.HL, Memory_Bus::GetLSBF(bus)); break;
-		// case 0x22: com.LDI(reg_select::HL, &bus); break;
 		// case 0x26: com.LD8(reg_select::H, reg.HL, bus.GetMemoryAt(reg.PC.Get())); break;
 		// case 0x2e: com.LD8(reg_select::L, reg.HL, bus.GetMemoryAt(reg.PC.Get())); break;
-		// case 0x31: com.LD16(reg.SP, Memory_Bus::GetLSBF(bus)); break;
-		// case 0x3e: com.LD8(reg_select::A, reg.AF, opcode); break;
-		// case 0xaf: com.XOR(reg_select::A, reg.AF); break;
-		// case 0xc3: com.JP(bus); break;
-		// case 0xea: com.LD8(reg_select::NN, reg.NN, reg.AF.GetFirst(), &bus); break;
-		// case 0xf3: com.DI(bus); break;
 	}
+
+	return 0;
+}
+bool Processor::LoadROM(const char* path) {
+	return bus.LoadROM(path);
+}
+int Processor::GetRomSize() {
+	return bus.GetRomSize();
 }
