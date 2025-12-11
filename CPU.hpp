@@ -1,11 +1,10 @@
 #include <iostream>
 #include <fstream>
+#include <vector>
 
 #pragma once
 
-#define u8 uint8_t
-#define s8 char
-#define u16 uint16_t
+
 #define flg bool
 #define set true
 #define reset false
@@ -16,74 +15,130 @@
 #define ROM_LIMIT 0x7fff
 
 namespace CPU {
-	extern u8 opcode;
-	enum reg_select { A = 0, B = 0, D = 0, H = 0, F = 1, C = 1, E = 1, L = 1, NN = 2, HL = 3};
+	using u8 = uint8_t;
+	using u16 = uint16_t;
+	using s8 = int8_t;
+	
+	struct RegisterPair {
+		union {
+			struct {
+				u8 F;
+				u8 A;
+			};
+			u16 AF;
+		};
 
-	class Register16 {
-	private:
-		u8 first_val, last_val;
-	public:
-		u16 Get() const;
-		u16 GetFirst() const;
-		u16 GetLast() const;
-		void Set(u16 val);
-		void SetFirst(u8 val);
-		void SetLast(u8 val);
-		void SetVirtual(u8 f_val, u8 l_val);
-		void Increment(u8 val);
-		void Decrement(u8 val);
+		union {
+			struct {
+				u8 C;
+				u8 B;
+			};
+			u16 BC;
+		};
+
+		union {
+			struct {
+				u8 E;
+				u8 D;
+			};
+			u16 DE;
+		};
+
+		union {
+			struct {
+				u8 L;
+				u8 H;
+			};
+			u16 HL;
+		};
+
+		u16 SP;
+		u16 PC;
 	};
 
-	class RegisterFlag {
-	private:
-		flg value;
-	public:
-		flg Get() const;
-		void Set(flg val);
+	class Flags {
+		private:
+		u8& f_reg;
+
+		public:
+		Flags(u8& f) : f_reg(f) {}
+
+		bool Z() const { return (f_reg >> 7) & 1; }
+		bool N() const { return (f_reg >> 6) & 1; }
+		bool H() const { return (f_reg >> 5) & 1; }
+		bool C() const { return (f_reg >> 4) & 1; }
+
+		void SetZ(bool v) { if (v) f_reg |= (1 << 7); else f_reg &= ~(1 << 7); }
+		void SetN(bool v) { if (v) f_reg |= (1 << 6); else f_reg &= ~(1 << 6); }
+		void SetH(bool v) { if (v) f_reg |= (1 << 5); else f_reg &= ~(1 << 5); }
+		void SetC(bool v) { if (v) f_reg |= (1 << 4); else f_reg &= ~(1 << 4); }
 	};
 
 	struct Register {
-		Register16 AF, BC, DE, HL, SP, PC, NN;
+		RegisterPair val;
+		Flags flag;
 
-		struct Flag_Register {
-			RegisterFlag Z, H, N, C;
-		};
-
-		Flag_Register flag;
+		Register() : flag(val.F) {}
 
 		void Init();
 	};
 
-	extern Register reg;
-
 	class Memory_Bus {
 	private:
-		u8* memory = new u8[0x10000];
+		std::vector<u8> rom;	// Cartucho
+		u8 vram[0x2000];		// Video RAM (8KB)
+		u8 wram[0x2000];		// Work RAM (8KB)
+		u8 hram[0x80];			// High RAM
+		u8 io[0x80];			// IO Registers
 		interr IME;
 
 	public:
-		void Fetch();
-		void LoadGame(std::basic_ifstream<u8>& gb_rom);
-		void ShowMemory();
-		u8 GetMemoryAt(u16 PC);
-		void SetMemory(u16 memory_pos, u8 data);
-		void Execute(Memory_Bus& bus);
-
-		static u16 GetLSBF(Memory_Bus& bus);
-
-		void SetIMEDisable();
+		Memory_Bus();
+		
+		u8 Read(u16 address);
+		void Write(u16 address, u8 value);
+		bool LoadROM(const char* path);
+		void ShowMemory(u16 start, u16 end);
 	};
 
 	class Command {
 	public:
 		void NOP();
-		void LD8(char reg_name, Register16& reg, u8 val, Memory_Bus* bus = nullptr);
-		void LD16(Register16& reg, u16 val, Memory_Bus* bus = nullptr);
-		void JP(Memory_Bus& bus);
-		void DI(Memory_Bus& bus);
-		void XOR(char reg_name, Register16 regis);
-		void LDI(char reg_name, Memory_Bus* bus);
-		void DEC8(char reg_name, Register16& regis, Memory_Bus& bus);
-		void JR(Memory_Bus& bus, flg condition);
+
+		// Carga generica de 8 bits: LD r1, r2
+		void LD(u8& dest, u8 src);
+		// Carga de 16 bits: LD rr, nn
+		void LD(u16& dest, u16 val);
+		// Carga en memoria: LD (HL), r
+		void LD_Mem(Memory_Bus& bus, u16 addr, u8 val);
+
+		void JP(u16& PC, u16 address);
+
+		void JR(u16& PC, s8 offset, bool condition);
+
+		void XOR(u8& A, u8 val, Flags& flags);
+
+		void DEC(u8& reg, Flags& flags);
+		void DEC_Mem(Memory_Bus& bus, u16 addr, Flags& flags);
+
+		void DI(bool& ime_flag);
+		void LDI_Write(Memory_Bus& bus, u16& HL, u8 val);
+		void LDI_Read(Memory_Bus& bus, u16& HL, u8& dest);
+	};
+
+	class Processor {
+		private:
+		bool IME;
+		Register reg;
+		Memory_Bus bus;
+		Command com;
+		u8 current_opcode;
+
+		public:
+		void Init();
+		void Step();	// Fetch-Decode-Execute
+		void Execute();
+		u16 Fetch16();
+		void SetIME(bool enabled) { IME = enable; };
 	};
 }
